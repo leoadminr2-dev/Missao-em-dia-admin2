@@ -65,7 +65,7 @@ jobs:
           mkdir -p public-download
           if [ "${{ steps.compile.outputs.exit_code }}" = "0" ]; then
             cp MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk public-download/Moreira-TV-Premium.apk
-            printf 'OK: APK Moreira TV Premium compilado.\n' > public-download/build-status.txt
+            printf 'OK: APK Moreira TV Premium compilado do commit %s.\n' "$GITHUB_SHA" > public-download/build-status.txt
           else
             printf 'ERRO: compilacao falhou. Detalhes:\n' > public-download/build-status.txt
             grep -Ei 'error:|failed|exception|could not' build-output.log | tail -n 12 >> public-download/build-status.txt || true
