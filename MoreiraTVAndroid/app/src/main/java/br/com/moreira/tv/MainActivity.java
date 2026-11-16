@@ -147,9 +147,17 @@ public class MainActivity extends Activity {
         authCard.addView(label("ATIVAR MINHA TV",17,WHITE,true));
         authCard.addView(label("Configure uma vez. Depois, entre automaticamente.",12,MUTED,false));
         gap(authCard,6);
-        authCard.addView(label("Endereço de conexão",12,MUTED,true));
+        TextView hostLabel=label("Configuração avançada de conexão",12,MUTED,true);
         hostInput=input("Endereço de conexão",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
-        hostInput.setText(DEFAULT_SERVER);authCard.addView(hostInput);gap(authCard,7);
+        hostInput.setText(DEFAULT_SERVER);
+        hostLabel.setVisibility(View.GONE);hostInput.setVisibility(View.GONE);
+        authCard.addView(hostLabel);authCard.addView(hostInput);
+        Button advanced=button("Mais opções de conexão",false);
+        advanced.setOnClickListener(v->{
+            int visibility=hostInput.getVisibility()==View.GONE?View.VISIBLE:View.GONE;
+            hostLabel.setVisibility(visibility);hostInput.setVisibility(visibility);
+        });
+        authCard.addView(advanced);gap(authCard,7);
         authCard.addView(label("Código de acesso",12,MUTED,true));
         userInput=input("Seu código",InputType.TYPE_CLASS_TEXT);authCard.addView(userInput);gap(authCard,7);
         authCard.addView(label("Chave pessoal",12,MUTED,true));
