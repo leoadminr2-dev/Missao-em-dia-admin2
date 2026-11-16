@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
@@ -34,10 +36,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
-    private static final int NAVY=Color.rgb(8,19,39), BLUE=Color.rgb(27,87,165);
+    private static final int BG=0xFF080E1B, SURFACE=0xFF121E32, BORDER=0xFF283955, WHITE=0xFFF4F8FF, MUTED=0xFF9CB1CE, ACCENT=0xFF33D5DB, BLUE=0xFF86B4FF;
+    private static final String DEFAULT_SERVER="http://aurinhatv.com";
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private EditText hostInput, userInput, passInput, searchInput;
     private TextView status, title;
+    private LinearLayout authCard, menu;
+    private Button[] tabs=new Button[3];
     private Spinner kindSpinner, categorySpinner;
     private ListView list;
     private Button connect;
@@ -50,30 +55,175 @@ public class MainActivity extends Activity {
     private final List<String> shownNames=new ArrayList<>();
     private String type="live";
 
-    @Override public void onCreate(Bundle state){super.onCreate(state);buildUi();}
+
+    @Override public void onCreate(Bundle state){
+        super.onCreate(state);
+        getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        buildUi();
+        String[] access=CredentialsVault.load(this);
+        if(access!=null){
+            hostInput.setText(access[0]);userInput.setText(access[1]);passInput.setText(access[2]);
+            authCard.setVisibility(View.GONE);setStatus("Preparando sua programação…",false);
+            login();
+        }
+    }
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
-    private TextView label(String s,int size,int color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setPadding(dp(2),dp(5),dp(2),dp(5));if(bold)v.setTypeface(null,Typeface.BOLD);return v;}
-    private EditText input(String hint, int inputType){EditText e=new EditText(this);e.setHint(hint);e.setTextSize(16);e.setSingleLine(true);e.setInputType(inputType);e.setPadding(dp(12),dp(9),dp(12),dp(9));e.setBackgroundColor(Color.WHITE);return e;}
-    private LinearLayout root(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setPadding(dp(15),dp(13),dp(15),dp(9));v.setBackgroundColor(Color.rgb(235,241,247));return v;}
+    private GradientDrawable shape(int fill,int stroke,int radius){
+        GradientDrawable d=new GradientDrawable();d.setColor(fill);d.setCornerRadius(dp(radius));
+        if(stroke!=0)d.setStroke(dp(1),stroke);return d;
+    }
+    private TextView label(String s,int size,int color,boolean bold){
+        TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);
+        v.setPadding(dp(2),dp(5),dp(2),dp(5));
+        if(bold)v.setTypeface(null,Typeface.BOLD);return v;
+    }
+    private EditText input(String hint,int inputType){
+        EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(0xFF8197B6);
+        e.setTextColor(WHITE);e.setTextSize(15);e.setSingleLine(true);e.setInputType(inputType);
+        e.setPadding(dp(14),dp(11),dp(14),dp(11));e.setBackground(shape(SURFACE,BORDER,12));
+        return e;
+    }
+    private LinearLayout root(){
+        LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);
+        v.setPadding(dp(15),dp(14),dp(15),dp(8));v.setBackgroundColor(BG);return v;
+    }
+    private LinearLayout vertical(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
+    private void gap(LinearLayout parent,int h){parent.addView(new View(this),new LinearLayout.LayoutParams(1,dp(h)));}
+    private Button button(String text,boolean active){
+        Button b=new Button(this);b.setText(text);b.setAllCaps(false);b.setTextSize(13);
+        b.setTypeface(null,Typeface.BOLD);b.setTextColor(active?BG:WHITE);
+        b.setPadding(dp(6),dp(9),dp(6),dp(9));
+        b.setBackground(shape(active?ACCENT:SURFACE,active?0:BORDER,13));return b;
+    }
+    private void updateTabs(){
+        String[] kinds={"live","movie","series"};
+        for(int i=0;i<3;i++){
+            boolean active=kinds[i].equals(type);
+            tabs[i].setTextColor(active?BG:WHITE);
+            tabs[i].setBackground(shape(active?ACCENT:SURFACE,active?0:BORDER,13));
+        }
+    }
+    private void showAccessMenu(){
+        new AlertDialog.Builder(this).setTitle("Moreira TV — Acesso")
+            .setItems(new String[]{"Configurar minha conexão","Apagar acesso salvo","Cancelar"},(d,n)->{
+                if(n==0){authCard.setVisibility(View.VISIBLE);setStatus("Atualize seu acesso e toque em ENTRAR.",false);}
+                else if(n==1){
+                    new AlertDialog.Builder(this).setTitle("Apagar acesso deste celular?")
+                        .setMessage("A operação não altera o serviço nem outros dispositivos.")
+                        .setNegativeButton("Cancelar",null)
+                        .setPositiveButton("Apagar",(a,b)->{
+                            CredentialsVault.clear(this);loggedIn=false;username="";password="";
+                            userInput.setText("");passInput.setText("");
+                            menu.setVisibility(View.GONE);authCard.setVisibility(View.VISIBLE);
+                            setStatus("Configure seu acesso pessoal.",false);
+                        }).show();
+                }
+            }).show();
+    }
     private void buildUi(){
         LinearLayout base=root();setContentView(base);
-        title=label("MOREIRA TV",27,NAVY,true);base.addView(title);
-        base.addView(label("Player privado • Android",13,BLUE,true));
-        LinearLayout auth=new LinearLayout(this);auth.setOrientation(LinearLayout.VERTICAL);auth.setPadding(0,dp(5),0,dp(10));base.addView(auth);
-        auth.addView(label("Servidor",14,NAVY,true));hostInput=input("http://servidor.exemplo",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);hostInput.setText("http://aurinhatv.com");auth.addView(hostInput);
-        auth.addView(label("Usuário",14,NAVY,true));userInput=input("Usuário fornecido pelo provedor",InputType.TYPE_CLASS_TEXT);auth.addView(userInput);
-        auth.addView(label("Senha",14,NAVY,true));passInput=input("Senha fornecida pelo provedor",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);auth.addView(passInput);
-        connect=new Button(this);connect.setText("CONECTAR AO SERVIDOR");auth.addView(connect);connect.setOnClickListener(v->login());
-        status=label("Digite os dados de acesso. Nenhuma senha é gravada no celular.",13,BLUE,false);base.addView(status);
-        kindSpinner=new Spinner(this);kindSpinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"TV AO VIVO","FILMES","SÉRIES"}));base.addView(kindSpinner);
-        categorySpinner=new Spinner(this);categories.add("Todas as categorias");categoryIds.add("all");updateCats();base.addView(categorySpinner);
-        searchInput=input("Pesquisar conteúdo",InputType.TYPE_CLASS_TEXT);base.addView(searchInput);
-        list=new ListView(this);listAdapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,shownNames);list.setAdapter(listAdapter);list.setDividerHeight(dp(1));base.addView(list,new LinearLayout.LayoutParams(-1,0,1));
-        searchInput.setEnabled(false);kindSpinner.setEnabled(false);categorySpinner.setEnabled(false);
-        kindSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int pos,long id){if(!changing&&loggedIn){type=new String[]{"live","movie","series"}[pos];loadCatalog();}}});
-        categorySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int pos,long id){filter();}});
-        searchInput.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int st,int before,int count){filter();}public void afterTextChanged(Editable e){}});
-        list.setOnItemClickListener((parent,v,pos,id)->{if(pos<shownItems.size()){JSONObject it=shownItems.get(pos); if("series".equals(type))showSeries(it);else play(it,type);}});
+        LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView logo=label("▶",23,ACCENT,true);logo.setGravity(Gravity.CENTER);
+        logo.setBackground(shape(SURFACE,BORDER,14));
+        head.addView(logo,new LinearLayout.LayoutParams(dp(50),dp(50)));
+        LinearLayout names=vertical();names.setPadding(dp(12),0,0,0);
+        title=label("MOREIRA TV",25,WHITE,true);names.addView(title);
+        names.addView(label("SUA TV. SUA EXPERIÊNCIA.",10,ACCENT,true));
+        head.addView(names,new LinearLayout.LayoutParams(0,-2,1));
+        Button settings=button("⚙",false);settings.setContentDescription("Gerenciar acesso");
+        settings.setOnClickListener(v->showAccessMenu());
+        head.addView(settings,new LinearLayout.LayoutParams(dp(54),dp(50)));
+        base.addView(head);gap(base,12);
+        LinearLayout banner=vertical();banner.setPadding(dp(15),dp(12),dp(15),dp(13));
+        GradientDrawable bkg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            new int[]{0xFF17365C,0xFF11213A,0xFF17192E});bkg.setCornerRadius(dp(15));
+        banner.setBackground(bkg);
+        banner.addView(label("BEM-VINDO AO SEU ESPAÇO",11,ACCENT,true));
+        banner.addView(label("O melhor da sua programação",18,WHITE,true));
+        banner.addView(label("Escolha, descubra e assista em um só lugar.",12,MUTED,false));
+        base.addView(banner);gap(base,11);
+        authCard=vertical();authCard.setPadding(dp(14),dp(12),dp(14),dp(12));
+        authCard.setBackground(shape(0xFF101D31,BORDER,16));base.addView(authCard);
+        authCard.addView(label("ATIVAR MINHA TV",17,WHITE,true));
+        authCard.addView(label("Configure uma vez. Depois, entre automaticamente.",12,MUTED,false));
+        gap(authCard,6);
+        authCard.addView(label("Endereço de conexão",12,MUTED,true));
+        hostInput=input("Endereço de conexão",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
+        hostInput.setText(DEFAULT_SERVER);authCard.addView(hostInput);gap(authCard,7);
+        authCard.addView(label("Código de acesso",12,MUTED,true));
+        userInput=input("Seu código",InputType.TYPE_CLASS_TEXT);authCard.addView(userInput);gap(authCard,7);
+        authCard.addView(label("Chave pessoal",12,MUTED,true));
+        passInput=input("Sua chave",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        authCard.addView(passInput);gap(authCard,9);
+        connect=button("ENTRAR NO MOREIRA TV   →",true);authCard.addView(connect);
+        connect.setOnClickListener(v->login());
+        authCard.addView(label("Acesso protegido apenas neste aparelho.",11,MUTED,false));
+        status=label("Ative sua TV para começar.",12,BLUE,false);
+        status.setPadding(dp(5),dp(8),dp(5),dp(7));base.addView(status);
+        menu=vertical();menu.setVisibility(View.GONE);
+        base.addView(menu,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout bar=new LinearLayout(this);bar.setGravity(Gravity.CENTER_VERTICAL);
+        String[] captions={"◉ AO VIVO","▶ FILMES","▣ SÉRIES"},kinds={"live","movie","series"};
+        for(int i=0;i<3;i++){
+            tabs[i]=button(captions[i],i==0);
+            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1);
+            if(i>0)p.leftMargin=dp(6);
+            bar.addView(tabs[i],p);
+            final int idx=i;
+            tabs[i].setOnClickListener(v->{
+                if(!loggedIn||type.equals(kinds[idx]))return;
+                type=kinds[idx];updateTabs();loadCatalog();
+            });
+        }
+        menu.addView(bar);gap(menu,12);
+        menu.addView(label("ESCOLHA O QUE ASSISTIR",12,MUTED,true));
+        categorySpinner=new Spinner(this);
+        categories.add("Todas as categorias");categoryIds.add("all");updateCats();
+        categorySpinner.setPadding(dp(12),dp(5),dp(12),dp(5));
+        categorySpinner.setBackground(shape(SURFACE,BORDER,12));
+        menu.addView(categorySpinner,new LinearLayout.LayoutParams(-1,dp(48)));
+        gap(menu,10);
+        searchInput=input("⌕  Pesquisar canais, filmes e séries",InputType.TYPE_CLASS_TEXT);
+        menu.addView(searchInput);gap(menu,10);
+        list=new ListView(this);list.setBackgroundColor(Color.TRANSPARENT);
+        list.setCacheColorHint(Color.TRANSPARENT);list.setDivider(null);
+        listAdapter=new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,shownNames){
+            @Override public View getView(int position,View previous,android.view.ViewGroup parent){
+                LinearLayout card=new LinearLayout(MainActivity.this);
+                card.setGravity(Gravity.CENTER_VERTICAL);
+                card.setPadding(dp(12),dp(8),dp(12),dp(8));
+                card.setBackground(shape(SURFACE,BORDER,12));
+                TextView icon=label("▶",17,ACCENT,true);
+                icon.setGravity(Gravity.CENTER);icon.setBackground(shape(0xFF1D354D,0,10));
+                card.addView(icon,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                LinearLayout content=vertical();content.setPadding(dp(10),0,dp(6),0);
+                TextView name=label(getItem(position),15,WHITE,true);name.setMaxLines(2);
+                content.addView(name);content.addView(label("TOQUE PARA ASSISTIR",10,MUTED,false));
+                card.addView(content,new LinearLayout.LayoutParams(0,-2,1));
+                card.addView(label("›",25,ACCENT,true));
+                LinearLayout wrap=vertical();wrap.setPadding(0,0,0,dp(6));wrap.addView(card);
+                return wrap;
+            }
+        };
+        list.setAdapter(listAdapter);
+        menu.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+        searchInput.setEnabled(false);categorySpinner.setEnabled(false);
+        categorySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(AdapterView<?> p){}
+            public void onItemSelected(AdapterView<?> p,View v,int pos,long id){filter();}
+        });
+        searchInput.addTextChangedListener(new TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int st,int before,int count){filter();}
+            public void afterTextChanged(Editable e){}
+        });
+        list.setOnItemClickListener((parent,v,pos,id)->{
+            if(pos<shownItems.size()){
+                JSONObject it=shownItems.get(pos);
+                if("series".equals(type))showSeries(it);else play(it,type);
+            }
+        });
+        updateTabs();
     }
     private void updateCats(){changing=true;categorySpinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,categories));changing=false;}
     private void setStatus(String s,boolean error){status.setText(s);status.setTextColor(error?Color.rgb(182,40,40):BLUE);}
