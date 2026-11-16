@@ -22,21 +22,39 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Compilar aplicativo
+      - name: Compilar aplicativo e registrar resultado
+        id: compile
         working-directory: MoreiraTVAndroid
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
-      - name: Verificar APK
-        run: test -s MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk
+        shell: bash
+        run: |
+          set +e
+          gradle :app:assembleDebug --no-daemon --stacktrace > ../build-output.log 2>&1
+          code=$?
+          tail -n 35 ../build-output.log
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Publicar status e APK quando compilado
+        shell: bash
+        run: |
+          mkdir -p public-download
+          if [ "${{ steps.compile.outputs.exit_code }}" = "0" ]; then
+            cp MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk public-download/Moreira-TV-Android.apk
+            printf 'OK: APK Android compilado.\n' > public-download/build-status.txt
+          else
+            printf 'ERRO: compilacao falhou. Detalhes:\n' > public-download/build-status.txt
+            grep -Ei 'error:|failed|exception|could not' build-output.log | tail -n 12 >> public-download/build-status.txt || true
+          fi
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add public-download/
+          if ! git diff --cached --quiet; then
+            git commit -m 'Resultado da compilacao Moreira TV Android'
+            git pull --rebase
+            git push
+          fi
       - uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.exit_code == '0'
         with:
           name: Moreira-TV-Android-APK
           path: MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
-      - name: Publicar APK para download direto
-        run: |
-          mkdir -p public-download
-          cp MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk public-download/Moreira-TV-Android.apk
-          git config user.name github-actions
-          git config user.email github-actions@users.noreply.github.com
-          git add public-download/Moreira-TV-Android.apk
-          if ! git diff --cached --quiet; then git commit -m 'Publicar APK Moreira TV Android'; git push; fi
