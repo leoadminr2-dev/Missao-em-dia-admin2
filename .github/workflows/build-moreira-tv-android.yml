@@ -13,6 +13,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: moreira-tv-premium-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -52,7 +55,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.compile.outputs.exit_code == '0'
         with:
-          name: Moreira-TV-Android-APK
+          name: Moreira-TV-Premium-APK
           path: MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
       - name: Publicar status e APK quando compilado
@@ -61,8 +64,8 @@ jobs:
         run: |
           mkdir -p public-download
           if [ "${{ steps.compile.outputs.exit_code }}" = "0" ]; then
-            cp MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk public-download/Moreira-TV-Android.apk
-            printf 'OK: APK Android compilado.\n' > public-download/build-status.txt
+            cp MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk public-download/Moreira-TV-Premium.apk
+            printf 'OK: APK Moreira TV Premium compilado.\n' > public-download/build-status.txt
           else
             printf 'ERRO: compilacao falhou. Detalhes:\n' > public-download/build-status.txt
             grep -Ei 'error:|failed|exception|could not' build-output.log | tail -n 12 >> public-download/build-status.txt || true
