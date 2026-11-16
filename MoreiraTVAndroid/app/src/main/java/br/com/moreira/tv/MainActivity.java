@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
     private TextView status, title;
     private LinearLayout authCard, menu;
     private Button[] tabs=new Button[3];
-    private Spinner kindSpinner, categorySpinner;
+    private Spinner categorySpinner;
     private ListView list;
     private Button connect;
     private String server, username, password;
@@ -225,15 +225,27 @@ public class MainActivity extends Activity {
         });
         updateTabs();
     }
-    private void updateCats(){changing=true;categorySpinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,categories));changing=false;}
+    private void updateCats(){
+        changing=true;
+        ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,categories){
+            @Override public View getView(int pos,View old,android.view.ViewGroup parent){
+                TextView t=label(getItem(pos),15,WHITE,true);t.setSingleLine(true);return t;
+            }
+            @Override public View getDropDownView(int pos,View old,android.view.ViewGroup parent){
+                TextView t=label(getItem(pos),15,WHITE,false);
+                t.setPadding(dp(14),dp(14),dp(14),dp(14));t.setBackgroundColor(SURFACE);return t;
+            }
+        };
+        categorySpinner.setAdapter(adapter);changing=false;
+    }
     private void setStatus(String s,boolean error){status.setText(s);status.setTextColor(error?Color.rgb(182,40,40):BLUE);}
     private String safeError(Exception e){return e instanceof java.net.UnknownHostException?"Servidor não encontrado (DNS). Verifique o endereço e a internet.": e instanceof java.net.SocketTimeoutException?"Servidor não respondeu dentro do tempo limite.":e instanceof java.net.ConnectException?"Conexão recusada pelo servidor.":"Não foi possível conectar: "+e.getClass().getSimpleName();}
     private String normalize(String v){String s=v.trim();while(s.endsWith("/"))s=s.substring(0,s.length()-1);if(!s.startsWith("http://")&&!s.startsWith("https://"))s="http://"+s;return s;}
     private void login(){
         String h=hostInput.getText().toString().trim(),u=userInput.getText().toString().trim(),p=passInput.getText().toString();
-        if(h.isEmpty()||u.isEmpty()||p.isEmpty()){setStatus("Preencha servidor, usuário e senha.",true);return;}
+        if(h.isEmpty()||u.isEmpty()||p.isEmpty()){setStatus("Informe seus dados uma vez para ativar sua TV.",true);return;}
         server=normalize(h);username=u;password=p;loggedIn=false;
-        connect.setEnabled(false);setStatus("Testando autenticação no servidor…",false);
+        connect.setEnabled(false);setStatus("Conectando ao Moreira TV…",false);
         worker.execute(()->{
             try{
                 JSONObject info=fetchObject(null,null);
@@ -241,8 +253,19 @@ public class MainActivity extends Activity {
                 if(usr==null||!"1".equals(String.valueOf(usr.opt("auth"))))throw new IllegalStateException("Acesso não autorizado pelo servidor");
                 String st=usr.optString("status","");
                 if(st.toLowerCase(Locale.ROOT).contains("expir")||st.equalsIgnoreCase("disabled")||st.equalsIgnoreCase("banned"))throw new IllegalStateException("Assinatura sem acesso ativo");
-                runOnUiThread(()->{loggedIn=true;connect.setEnabled(true);kindSpinner.setEnabled(true);categorySpinner.setEnabled(true);searchInput.setEnabled(true);setStatus("Conectado! Carregando TV ao vivo…",false);type="live";kindSpinner.setSelection(0);loadCatalog();});
-            }catch(Exception ex){runOnUiThread(()->{connect.setEnabled(true);setStatus(ex instanceof IllegalStateException?ex.getMessage():safeError(ex),true);});}
+                boolean stored=CredentialsVault.save(this,server,username,password);
+                runOnUiThread(()->{
+                    loggedIn=true;connect.setEnabled(true);authCard.setVisibility(View.GONE);
+                    menu.setVisibility(View.VISIBLE);categorySpinner.setEnabled(true);searchInput.setEnabled(true);
+                    type="live";updateTabs();
+                    setStatus(stored?"Sua TV está pronta. Aproveite!":"Conectado, mas não foi possível salvar o acesso.",!stored);
+                    loadCatalog();
+                });
+            }catch(Exception ex){runOnUiThread(()->{
+                connect.setEnabled(true);authCard.setVisibility(View.VISIBLE);
+                if(!loggedIn)menu.setVisibility(View.GONE);
+                setStatus(ex instanceof IllegalStateException?ex.getMessage():safeError(ex),true);
+            });}
         });
     }
     private String encoded(String v)throws Exception{return URLEncoder.encode(v,"UTF-8");}
@@ -264,7 +287,7 @@ public class MainActivity extends Activity {
     private JSONArray fetchArray(String action,String extra)throws Exception{return new JSONArray(read(new URL(endpoint(action,extra))));}
     private void loadCatalog(){
         if(!loggedIn)return;
-        final String requestedType=type;final int current=++generation;setStatus("Carregando catálogo…",false);searchInput.setText("");
+        final String requestedType=type;final int current=++generation;setStatus("Atualizando sua programação…",false);searchInput.setText("");
         allItems.clear();shownItems.clear();shownNames.clear();listAdapter.notifyDataSetChanged();
         final String cAction=requestedType.equals("live")?"get_live_categories":requestedType.equals("movie")?"get_vod_categories":"get_series_categories";
         final String iAction=requestedType.equals("live")?"get_live_streams":requestedType.equals("movie")?"get_vod_streams":"get_series";
@@ -274,7 +297,7 @@ public class MainActivity extends Activity {
                 List<String> cats=new ArrayList<>(),ids=new ArrayList<>();cats.add("Todas as categorias");ids.add("all");
                 for(int i=0;i<cc.length();i++){JSONObject item=cc.optJSONObject(i);if(item==null)continue;cats.add(item.optString("category_name","Sem nome"));ids.add(item.optString("category_id",""));}
                 List<JSONObject> parsed=new ArrayList<>();for(int i=0;i<ii.length();i++){JSONObject item=ii.optJSONObject(i);if(item!=null)parsed.add(item);}
-                runOnUiThread(()->{if(current!=generation)return;categories.clear();categories.addAll(cats);categoryIds.clear();categoryIds.addAll(ids);allItems.addAll(parsed);updateCats();filter();setStatus("Conectado • "+parsed.size()+" itens carregados",false);});
+                runOnUiThread(()->{if(current!=generation)return;categories.clear();categories.addAll(cats);categoryIds.clear();categoryIds.addAll(ids);allItems.addAll(parsed);updateCats();filter();setStatus("●  "+parsed.size()+" opções disponíveis",false);});
             }catch(Exception e){runOnUiThread(()->{if(current==generation)setStatus("Falha ao carregar catálogo: "+safeError(e),true);});}
         });
     }
