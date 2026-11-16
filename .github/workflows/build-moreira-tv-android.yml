@@ -5,6 +5,11 @@ on:
     paths:
       - 'MoreiraTVAndroid/**'
       - '.github/workflows/build-moreira-tv-android.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'MoreiraTVAndroid/**'
+      - '.github/workflows/build-moreira-tv-android.yml'
   workflow_dispatch:
 permissions:
   contents: write
@@ -33,7 +38,14 @@ jobs:
           tail -n 35 ../build-output.log
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
+      - uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.exit_code == '0'
+        with:
+          name: Moreira-TV-Android-APK
+          path: MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
       - name: Publicar status e APK quando compilado
+        if: github.event_name == 'push'
         shell: bash
         run: |
           mkdir -p public-download
@@ -52,9 +64,3 @@ jobs:
             git pull --rebase
             git push
           fi
-      - uses: actions/upload-artifact@v4
-        if: steps.compile.outputs.exit_code == '0'
-        with:
-          name: Moreira-TV-Android-APK
-          path: MoreiraTVAndroid/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
