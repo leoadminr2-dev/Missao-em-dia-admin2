@@ -16,6 +16,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ImageView;
+import com.bumptech.glide.Glide;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -201,9 +203,19 @@ public class MainActivity extends Activity {
                 card.setGravity(Gravity.CENTER_VERTICAL);
                 card.setPadding(dp(12),dp(8),dp(12),dp(8));
                 card.setBackground(shape(SURFACE,BORDER,12));
-                TextView icon=label("▶",17,ACCENT,true);
-                icon.setGravity(Gravity.CENTER);icon.setBackground(shape(0xFF1D354D,0,10));
-                card.addView(icon,new LinearLayout.LayoutParams(dp(42),dp(42)));
+                ImageView artwork=new ImageView(MainActivity.this);
+                artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                artwork.setBackground(shape(0xFF1D354D,0,10));
+                String imageUrl="";
+                if(position<shownItems.size()){
+                    JSONObject item=shownItems.get(position);
+                    imageUrl=item.optString("stream_icon","");
+                    if(imageUrl.isEmpty())imageUrl=item.optString("cover",item.optString("cover_big",""));
+                }
+                Glide.with(MainActivity.this).load(imageUrl)
+                    .placeholder(R.drawable.ic_moreira_tv)
+                    .error(R.drawable.ic_moreira_tv).centerCrop().into(artwork);
+                card.addView(artwork,new LinearLayout.LayoutParams(dp(54),dp(54)));
                 LinearLayout content=vertical();content.setPadding(dp(10),0,dp(6),0);
                 TextView name=label(getItem(position),15,WHITE,true);name.setMaxLines(2);
                 content.addView(name);content.addView(label("TOQUE PARA ASSISTIR",10,MUTED,false));
