@@ -17,6 +17,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.AspectRatioFrameLayout;
 
 /**
  * Player em tela cheia: sem barra superior de titulo e sem barra inferior de status.
@@ -28,6 +29,7 @@ public class PlayerActivity extends Activity {
     private PlayerView playerView;
     private String server,user,pass,type,id,ext,name,playingUrl;
     private boolean fallback=false;
+    private boolean fillScreen=true; // Preencher a tela em qualquer canal, filme ou episodio.
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -49,6 +51,7 @@ public class PlayerActivity extends Activity {
         playerView=new PlayerView(this);
         playerView.setUseController(true);
         playerView.setControllerAutoShow(false);
+        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
         playerView.setControllerShowTimeoutMs(3000);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         playerView.setContentDescription("Toque para mostrar controles. Segure para opcoes.");
@@ -78,6 +81,19 @@ public class PlayerActivity extends Activity {
         start(ext);
     }
 
+    private void applyVideoLayout() {
+        enableFullscreen();
+        if (playerView!=null) {
+            playerView.setResizeMode(fillScreen ? AspectRatioFrameLayout.RESIZE_MODE_ZOOM : AspectRatioFrameLayout.RESIZE_MODE_FIT);
+            playerView.hideController();
+        }
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        applyVideoLayout();
+    }
+
     private void enableFullscreen() {
         getWindow().getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
@@ -96,16 +112,21 @@ public class PlayerActivity extends Activity {
     private void showOptions() {
         new AlertDialog.Builder(this)
             .setTitle(name==null?"Moreira TV":name)
-            .setItems(new String[]{"Voltar a programacao","Abrir em outro player","Continuar assistindo"},(d,choice)->{
+            .setItems(new String[]{"Voltar a programacao","Abrir em outro player",fillScreen ? "Mostrar imagem completa (sem cortar)" : "Preencher a tela inteira","Continuar assistindo"},(d,choice)->{
                 if(choice==0)finish();
                 else if(choice==1)openExternal();
-                else enableFullscreen();
+                else if(choice==2) {
+                    fillScreen=!fillScreen;
+                    applyVideoLayout();
+                    Toast.makeText(this,fillScreen ? "Tela preenchida" : "Imagem sem cortes",Toast.LENGTH_SHORT).show();
+                } else applyVideoLayout();
             })
             .show();
     }
 
     private String escape(String v){return Uri.encode(v);}
     private void start(String format) {
+        applyVideoLayout(); // Inclusive ao mudar HLS para TS e ao iniciar outro canal.
         String prefix="live".equals(type)?"live":"movie".equals(type)?"movie":"series";
         playingUrl=server+"/"+prefix+"/"+escape(user)+"/"+escape(pass)+"/"+escape(id)+"."+format;
         MediaItem.Builder builder=new MediaItem.Builder().setUri(Uri.parse(playingUrl));
