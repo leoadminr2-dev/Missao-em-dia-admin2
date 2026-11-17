@@ -1,0 +1,31 @@
+name: Moreira PLAY - diagnostico publico DNS (sem credenciais)
+on:
+  push:
+    branches: [moreira-play-canonical]
+    paths: ['.github/workflows/moreira-play-dns-diagnostic.yml']
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Resolvers publicos e alcance HTTP
+        shell: bash
+        run: |
+          set +e
+          HOST='aurinhatv.com'
+          echo "=== DNS publico para $HOST (sem senha ou acesso do usuario) ==="
+          for DNS in 1.1.1.1 8.8.8.8 9.9.9.9; do
+            echo "--- @${DNS} A ---"
+            dig +time=4 +tries=1 @"$DNS" "$HOST" A +noall +answer +comments | tail -n 18
+            echo "--- @${DNS} AAAA ---"
+            dig +time=4 +tries=1 @"$DNS" "$HOST" AAAA +noall +answer +comments | tail -n 18
+          done
+          echo "=== DNS via rede do runner ==="
+          getent ahostsv4 "$HOST" | head -n 5
+          echo "=== HTTP sem credenciais ==="
+          curl -L -I --max-redirs 2 --connect-timeout 8 --max-time 15 -sS -o /dev/null -w 'http status=%{http_code} ip=%{remote_ip} effective=%{url_effective} err=%{errormsg}\n' "http://$HOST/" || true
+          curl -L -I --max-redirs 2 --connect-timeout 8 --max-time 15 -sS -o /dev/null -w 'https status=%{http_code} ip=%{remote_ip} effective=%{url_effective} err=%{errormsg}\n' "https://$HOST/" || true
+          echo "=== CONTROLE DNS: google.com ==="
+          dig +short @1.1.1.1 google.com A | head -n 3
+          echo "=== Diagnostico concluido: nao usa usuario ou senha de canais ==="
