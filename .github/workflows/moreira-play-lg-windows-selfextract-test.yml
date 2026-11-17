@@ -1,0 +1,118 @@
+name: MOREIRA PLAY LG - teste Windows do extrator v104
+on:
+  push:
+    branches: [moreira-play-canonical]
+    paths: ['.github/workflows/moreira-play-lg-windows-selfextract-test.yml']
+  workflow_dispatch:
+jobs:
+  testar:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - name: Gerar e executar o mesmo bootstrap PowerShell via CMD no Windows
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $bootstrap=@'
+          $ErrorActionPreference='Stop'
+          try {
+          $source=$env:MOREIRA_PLAY_SELF
+          if (-not $source -or -not [IO.File]::Exists($source)) { throw 'O arquivo .cmd nao foi encontrado' }
+          $lines=[IO.File]::ReadAllLines($source)
+          $begin=[Array]::IndexOf($lines,'::MOREIRA_FILES_START')
+          $finish=[Array]::IndexOf($lines,'::MOREIRA_FILES_END')
+          if($begin -lt 0 -or $finish -le $begin){throw 'Instalador incompleto'}
+          $target=Join-Path $env:LOCALAPPDATA 'MoreiraPLAY-LG\Versao-104-Corrigida'
+          $stage=$target+'.temp'
+          if([IO.Directory]::Exists($stage)){[IO.Directory]::Delete($stage,$true)}
+          [void][IO.Directory]::CreateDirectory($stage)
+          $i=$begin+1
+          $count=0
+          $sha=[Security.Cryptography.SHA256]::Create()
+          try {
+          while($i -lt $finish){
+          $header=$lines[$i]
+          if(-not $header.StartsWith('::FILE ')){throw 'Cabecalho de arquivo invalido no pacote'}
+          $parts=$header.Substring(7).Split('|')
+          if($parts.Length -ne 2){throw 'Cabecalho incompleto'}
+          $rel=$parts[0]
+          $expected=$parts[1]
+          if($rel.StartsWith('/') -or $rel.Contains('..') -or $rel.Contains(':') -or $rel.Contains('\\')){throw 'Caminho inseguro no pacote'}
+          if($expected -notmatch '^[0-9A-F]{64}$'){throw 'Hash invalido no pacote'}
+          $b64=New-Object System.Text.StringBuilder
+          $i++
+          while($i -lt $finish -and $lines[$i] -ne '::END_FILE'){
+          if(-not $lines[$i].StartsWith('::DATA ')){throw 'Dados de arquivo invalidos'}
+          [void]$b64.Append($lines[$i].Substring(7))
+          $i++
+          }
+          if($i -ge $finish){throw 'Dados de arquivo incompletos'}
+          $raw=[Convert]::FromBase64String($b64.ToString())
+          $actual=[BitConverter]::ToString($sha.ComputeHash($raw)).Replace('-','')
+          if($actual -ne $expected){throw ('Arquivo nao passou no SHA256: '+$rel)}
+          $dest=Join-Path $stage ($rel.Replace('/','\'))
+          $folder=[IO.Path]::GetDirectoryName($dest)
+          [void][IO.Directory]::CreateDirectory($folder)
+          [IO.File]::WriteAllBytes($dest,$raw)
+          $count++
+          $i++
+          }
+          } finally { $sha.Dispose() }
+          if($count -ne 11){throw 'Arquivos incompletos'}
+          $metadata=Join-Path $stage 'webos\appinfo.json'
+          $meta=Get-Content -LiteralPath $metadata -Raw | ConvertFrom-Json
+          if($meta.id -ne 'br.com.moreiraplay.lg' -or $meta.version -ne '1.0.4'){throw 'Versao ou identidade do app invalida'}
+          Write-Host ('[OK] '+$count+' arquivos extraidos e validados (SHA256).') -ForegroundColor Green
+          if($env:MOREIRA_PLAY_TEST_ONLY -eq '1'){
+          Write-Host '[OK] MODO TESTE: extracao sem alterar a TV.' -ForegroundColor Green
+          exit 0
+          }
+          if([IO.Directory]::Exists($target)){[IO.Directory]::Delete($target,$true)}
+          [IO.Directory]::Move($stage,$target)
+          $installer=Join-Path $target 'Instalar_MOREIRA_PLAY_LG_NATIVO.ps1'
+          Write-Host '[MOREIRA PLAY] Iniciando empacotador oficial da LG...' -ForegroundColor Cyan
+          & $installer
+          if($LASTEXITCODE -ne 0){throw 'O empacotador webOS encontrou um erro; o app instalado anteriormente foi preservado.'}
+          Write-Host '[OK] Etapa de instalacao finalizada.' -ForegroundColor Green
+          exit 0
+          }catch{
+          Write-Host ('ERRO: '+$_.Exception.Message) -ForegroundColor Red
+          exit 1
+          }
+          '@
+          $bootstrap=$bootstrap.Replace("`r`n","`n").TrimEnd("`n")
+          $testFiles=@(
+            'webos/appinfo.json','webos/index.html','webos/app.js','webos/style.css',
+            'webos/icon.png','webos/largeicon.png','service/services.json',
+            'service/package.json','service/service.js','Instalar_MOREIRA_PLAY_LG_NATIVO.ps1','LEIA-ME_PRIMEIRO.txt'
+          )
+          $code=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
+          if($code.Length -gt 7900){throw 'Comando Base64 ultrapassou o limite seguro do Windows'}
+          $cmd=Join-Path $env:RUNNER_TEMP 'MoreiraPLAY-Windows-Test.cmd'
+          $payload=[System.Collections.Generic.List[string]]::new()
+          $payload.Add('@echo off')
+          $payload.Add('setlocal DisableDelayedExpansion')
+          $payload.Add('set "MOREIRA_PLAY_SELF=%~f0"')
+          $payload.Add('powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand '+$code)
+          $payload.Add('exit /b %ERRORLEVEL%')
+          $payload.Add('::MOREIRA_FILES_START')
+          foreach($f in $testFiles){
+            if($f -eq 'webos/appinfo.json'){$value='{"id":"br.com.moreiraplay.lg","version":"1.0.4"}'}else{$value=('arquivo:'+ $f)}
+            $raw=[Text.Encoding]::UTF8.GetBytes($value)
+            $h=[Security.Cryptography.SHA256]::Create()
+            try {$digest=[BitConverter]::ToString($h.ComputeHash($raw)).Replace('-','')} finally {$h.Dispose()}
+            $payload.Add(('::FILE '+$f+'|'+$digest))
+            $payload.Add(('::DATA '+[Convert]::ToBase64String($raw)))
+            $payload.Add('::END_FILE')
+          }
+          $payload.Add('::MOREIRA_FILES_END')
+          [IO.File]::WriteAllLines($cmd,$payload,[Text.Encoding]::ASCII)
+          $env:MOREIRA_PLAY_TEST_ONLY='1'
+          & cmd.exe /d /c $cmd
+          if($LASTEXITCODE -ne 0){throw 'O mesmo bootstrap falhou na execucao no Windows'}
+          $stage=Join-Path $env:LOCALAPPDATA 'MoreiraPLAY-LG\Versao-104-Corrigida.temp'
+          foreach($f in $testFiles){
+            $file=Join-Path $stage $f
+            if(-not [IO.File]::Exists($file)){throw ('Arquivo nao extraido: '+$f)}
+          }
+          Write-Host 'TESTE WINDOWS APROVADO: CMD + PowerShell, 11 arquivos, SHA256, sem IO.Compression.'
