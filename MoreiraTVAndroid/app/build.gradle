@@ -2,6 +2,7 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'br.com.moreira.tv'
+    buildFeatures { buildConfig true }
     compileSdk 35
     defaultConfig {
         applicationId 'br.com.moreiraplay.app'
