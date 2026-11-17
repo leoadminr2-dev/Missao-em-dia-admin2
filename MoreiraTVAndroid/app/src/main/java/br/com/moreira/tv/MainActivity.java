@@ -344,5 +344,6 @@ public class MainActivity extends Activity {
             }catch(Exception e){runOnUiThread(()->setStatus("Não foi possível obter episódios: "+safeError(e),true));}
         });
     }
+    @Override protected void onResume(){super.onResume();UpdateManager.resumePendingInstall(this);}
     @Override protected void onDestroy(){generation++;worker.shutdownNow();super.onDestroy();}
 }
