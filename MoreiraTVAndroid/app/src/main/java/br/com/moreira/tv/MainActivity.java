@@ -55,7 +55,8 @@ public class MainActivity extends Activity {
     private final List<String> categories=new ArrayList<>(), categoryIds=new ArrayList<>();
     private ArrayAdapter<String> listAdapter;
     private final List<String> shownNames=new ArrayList<>();
-    private String type="live";
+    private String type="live", shelf="all", libraryAccount="";
+    private final Button[] shelfButtons=new Button[3];
 
 
     @Override public void onCreate(Bundle state){
@@ -97,6 +98,24 @@ public class MainActivity extends Activity {
         b.setTypeface(null,Typeface.BOLD);b.setTextColor(active?BG:WHITE);
         b.setPadding(dp(6),dp(9),dp(6),dp(9));
         b.setBackground(shape(active?ACCENT:SURFACE,active?0:BORDER,13));return b;
+    }
+    private void updateShelves(){
+        String[] kinds={"all","favorites","recent"};
+        for(int j=0;j<shelfButtons.length;j++){
+            if(shelfButtons[j]==null)continue;
+            boolean active=kinds[j].equals(shelf);
+            shelfButtons[j].setTextColor(active?BG:WHITE);
+            shelfButtons[j].setBackground(shape(active?ACCENT:SURFACE,active?0:BORDER,12));
+        }
+    }
+    private String itemId(JSONObject item,String kind){
+        if("series".equals(kind))return item.optString("series_id",item.optString("episode_id",item.optString("id","")));
+        return item.optString("stream_id",item.optString("id",""));
+    }
+    private String artOf(JSONObject item) {
+        String url=item.optString("stream_icon","");
+        if(url.isEmpty())url=item.optString("cover",item.optString("cover_big",""));
+        return url;
     }
     private void updateTabs(){
         String[] kinds={"live","movie","series"};
@@ -187,7 +206,18 @@ public class MainActivity extends Activity {
                 type=kinds[idx];updateTabs();loadCatalog();
             });
         }
-        menu.addView(bar);gap(menu,12);
+        menu.addView(bar);gap(menu,9);
+        LinearLayout shelves=new LinearLayout(this);shelves.setGravity(Gravity.CENTER_VERTICAL);
+        String[] names={"▦ Todos","★ Favoritos","↺ Recentes"},values={"all","favorites","recent"};
+        for(int j=0;j<names.length;j++){
+            final int k=j;
+            shelfButtons[j]=button(names[j],j==0);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(42),1);
+            if(j>0)lp.leftMargin=dp(5);
+            shelves.addView(shelfButtons[j],lp);
+            shelfButtons[j].setOnClickListener(v->{shelf=values[k];updateShelves();filter();});
+        }
+        menu.addView(shelves);gap(menu,10);
         menu.addView(label("ESCOLHA O QUE ASSISTIR",12,MUTED,true));
         categorySpinner=new Spinner(this);
         categories.add("Todas as categorias");categoryIds.add("all");updateCats();
@@ -208,21 +238,24 @@ public class MainActivity extends Activity {
                 ImageView artwork=new ImageView(MainActivity.this);
                 artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 artwork.setBackground(shape(0xFF1D354D,0,10));
-                String imageUrl="";
-                if(position<shownItems.size()){
-                    JSONObject item=shownItems.get(position);
-                    imageUrl=item.optString("stream_icon","");
-                    if(imageUrl.isEmpty())imageUrl=item.optString("cover",item.optString("cover_big",""));
-                }
+                JSONObject item=position<shownItems.size()?shownItems.get(position):new JSONObject();
+                String imageUrl=artOf(item);
                 Glide.with(MainActivity.this).load(imageUrl)
                     .placeholder(R.drawable.ic_moreira_tv)
-                    .error(R.drawable.ic_moreira_tv).centerCrop().into(artwork);
+                    .error(R.drawable.ic_moreira_tv).override(dp(80),dp(80)).centerCrop().into(artwork);
                 card.addView(artwork,new LinearLayout.LayoutParams(dp(54),dp(54)));
                 LinearLayout content=vertical();content.setPadding(dp(10),0,dp(6),0);
                 TextView name=label(getItem(position),15,WHITE,true);name.setMaxLines(2);
-                content.addView(name);content.addView(label("TOQUE PARA ASSISTIR",10,MUTED,false));
+                content.addView(name);
+                long saved="live".equals(type)?0:LocalLibrary.lastPosition(MainActivity.this,libraryAccount,type,itemId(item,type));
+                content.addView(label(saved>30000?"▶ CONTINUAR ASSISTINDO":"TOQUE PARA ASSISTIR",10,saved>30000?ACCENT:MUTED,false));
                 card.addView(content,new LinearLayout.LayoutParams(0,-2,1));
-                card.addView(label("›",25,ACCENT,true));
+                String id=itemId(item,type);
+                Button fav=button(LocalLibrary.isFavorite(MainActivity.this,libraryAccount,type,id)?"★":"☆",false);
+                fav.setTextSize(22);fav.setTextColor(ACCENT);
+                fav.setContentDescription("Alternar favorito");
+                fav.setOnClickListener(v->{if(id.isEmpty())return;LocalLibrary.toggleFavorite(MainActivity.this,libraryAccount,type,id);filter();});
+                card.addView(fav,new LinearLayout.LayoutParams(dp(48),dp(44)));
                 LinearLayout wrap=vertical();wrap.setPadding(0,0,0,dp(6));wrap.addView(card);
                 return wrap;
             }
@@ -242,10 +275,55 @@ public class MainActivity extends Activity {
         list.setOnItemClickListener((parent,v,pos,id)->{
             if(pos<shownItems.size()){
                 JSONObject it=shownItems.get(pos);
-                if("series".equals(type))showSeries(it);else play(it,type);
+                if("series".equals(type)&&!it.optBoolean("__recent"))showSeries(it);else play(it,type);
             }
         });
-        updateTabs();
+        list.setOnItemLongClickListener((parent,v,pos,id)->{
+            if(pos<shownItems.size())showItemOptions(shownItems.get(pos));
+            return true;
+        });
+        updateTabs();updateShelves();
+    }
+    private void showItemOptions(JSONObject obj){
+        String selectedId=itemId(obj,type);
+        boolean favorite=LocalLibrary.isFavorite(this,libraryAccount,type,selectedId);
+        String[] options="live".equals(type)
+            ?new String[]{favorite?"Remover dos favoritos":"Adicionar aos favoritos","Guia de programação","Assistir"}
+            :new String[]{favorite?"Remover dos favoritos":"Adicionar aos favoritos","Assistir"};
+        new AlertDialog.Builder(this).setTitle(titleOf(obj)).setItems(options,(dialog,index)->{
+            if(index==0){LocalLibrary.toggleFavorite(this,libraryAccount,type,selectedId);filter();}
+            else if("live".equals(type)&&index==1)showProgramGuide(selectedId);
+            else if("series".equals(type)&&!obj.optBoolean("__recent"))showSeries(obj);
+            else play(obj,type);
+        }).setNegativeButton("Voltar",null).show();
+    }
+    private void showProgramGuide(String streamId){
+        setStatus("Consultando programação do canal…",false);
+        worker.execute(()->{
+            try{
+                JSONObject response=fetchObject("get_short_epg","&stream_id="+encoded(streamId));
+                JSONArray programs=response.optJSONArray("epg_listings");
+                if(programs==null||programs.length()==0){runOnUiThread(()->setStatus("Este canal não disponibilizou guia de programação.",false));return;}
+                StringBuilder lines=new StringBuilder();
+                for(int n=0;n<Math.min(8,programs.length());n++){
+                    JSONObject program=programs.optJSONObject(n);if(program==null)continue;
+                    String name=decodeEpg(program.optString("title","Programa"));
+                    String start=program.optString("start","").replace("T"," ");
+                    lines.append(start).append("  ").append(name).append("\n\n");
+                }
+                runOnUiThread(()->{setStatus("Programação consultada",false);new AlertDialog.Builder(this)
+                    .setTitle("Guia do canal").setMessage(lines.toString()).setPositiveButton("Fechar",null).show();});
+            }catch(Exception e){runOnUiThread(()->setStatus("Guia não disponível para este canal.",true));}
+        });
+    }
+    private String decodeEpg(String value){
+        if(value.isEmpty())return "Programa";
+        try{
+            byte[] raw=android.util.Base64.decode(value,android.util.Base64.DEFAULT);
+            String decoded=new String(raw,java.nio.charset.StandardCharsets.UTF_8);
+            if(decoded.matches(".*[a-zA-ZÀ-ÿ].*")&&!decoded.contains("\uFFFD"))return decoded;
+        }catch(Exception ignored){}
+        return value;
     }
     private void updateCats(){
         changing=true;
@@ -266,7 +344,7 @@ public class MainActivity extends Activity {
     private void login(){
         String h=hostInput.getText().toString().trim(),u=userInput.getText().toString().trim(),p=passInput.getText().toString();
         if(h.isEmpty()||u.isEmpty()||p.isEmpty()){setStatus("Informe seus dados uma vez para ativar sua TV.",true);return;}
-        server=normalize(h);username=u;password=p;loggedIn=false;
+        server=normalize(h);username=u;password=p;libraryAccount=LocalLibrary.account(server,username);loggedIn=false;
         connect.setEnabled(false);setStatus("Conectando ao Moreira PLAY…",false);
         worker.execute(()->{
             try{
@@ -279,7 +357,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(()->{
                     loggedIn=true;connect.setEnabled(true);authCard.setVisibility(View.GONE);
                     menu.setVisibility(View.VISIBLE);categorySpinner.setEnabled(true);searchInput.setEnabled(true);
-                    type="live";updateTabs();
+                    type="live";shelf="all";updateTabs();updateShelves();
                     setStatus(stored?"Sua TV está pronta. Aproveite!":"Conectado, mas não foi possível salvar o acesso.",!stored);
                     loadCatalog();
                 });
@@ -324,14 +402,69 @@ public class MainActivity extends Activity {
         });
     }
     private String titleOf(JSONObject o){return o.optString("name",o.optString("title",o.optString("series_name","Sem título")));}
-    private void filter(){if(listAdapter==null)return;String q=searchInput.getText().toString().trim().toLowerCase(Locale.ROOT);int pos=categorySpinner.getSelectedItemPosition();String cat=pos>=0&&pos<categoryIds.size()?categoryIds.get(pos):"all";shownItems.clear();shownNames.clear();
-        for(JSONObject x:allItems){if(!cat.equals("all")&&!cat.equals(x.optString("category_id","")))continue;String label=titleOf(x);if(!label.toLowerCase(Locale.ROOT).contains(q))continue;shownItems.add(x);shownNames.add(label);if(shownItems.size()>=3000)break;}
+    private void filter(){
+        if(listAdapter==null)return;
+        String q=searchInput.getText().toString().trim().toLowerCase(Locale.ROOT);
+        int pos=categorySpinner.getSelectedItemPosition();
+        String cat=pos>=0&&pos<categoryIds.size()?categoryIds.get(pos):"all";
+        shownItems.clear();shownNames.clear();
+        if("recent".equals(shelf)){
+            JSONArray recents=LocalLibrary.recent(this,libraryAccount);
+            for(int n=0;n<recents.length();n++){
+                JSONObject source=recents.optJSONObject(n);if(source==null||!type.equals(source.optString("kind")))continue;
+                try{
+                    JSONObject x=new JSONObject(source.toString());
+                    x.put("__recent",true);
+                    if("series".equals(type))x.put("episode_id",source.optString("id"));
+                    else x.put("stream_id",source.optString("id"));
+                    if(!titleOf(x).toLowerCase(Locale.ROOT).contains(q))continue;
+                    shownItems.add(x);shownNames.add(titleOf(x));
+                }catch(Exception ignored){}
+            }
+        }else{
+            for(JSONObject x:allItems){
+                if(!cat.equals("all")&&!cat.equals(x.optString("category_id","")))continue;
+                String id=itemId(x,type);
+                if("favorites".equals(shelf)&&!LocalLibrary.isFavorite(this,libraryAccount,type,id))continue;
+                String name=titleOf(x);
+                if(!name.toLowerCase(Locale.ROOT).contains(q))continue;
+                shownItems.add(x);shownNames.add(name);
+                if(shownItems.size()>=3000)break;
+            }
+        }
         listAdapter.notifyDataSetChanged();
     }
+    private void putChannelQueue(Intent intent,String selectedId){
+        List<JSONObject> source=shownItems.size()>1?shownItems:allItems;
+        int selected=-1;
+        for(int i=0;i<source.size();i++)if(selectedId.equals(itemId(source.get(i),"live"))){selected=i;break;}
+        if(selected<0)return;
+        int first=Math.max(0,selected-35);
+        int last=Math.min(source.size(),selected+36);
+        ArrayList<String> ids=new ArrayList<>(),names=new ArrayList<>();
+        for(int i=first;i<last;i++){
+            String id=itemId(source.get(i),"live");
+            if(id.isEmpty())continue;
+            ids.add(id);names.add(titleOf(source.get(i)));
+        }
+        intent.putStringArrayListExtra("channel_ids",ids);
+        intent.putStringArrayListExtra("channel_names",names);
+        intent.putExtra("channel_index",ids.indexOf(selectedId));
+    }
     private void play(JSONObject obj,String kind){
-        String id=kind.equals("series")?obj.optString("episode_id",obj.optString("id")):obj.optString("stream_id","");if(id.isEmpty()){setStatus("Item sem ID de stream.",true);return;}
-        String ext=kind.equals("live")?"m3u8":obj.optString("container_extension","mp4");if(ext.isEmpty())ext="mp4";
-        Intent i=new Intent(this,PlayerActivity.class);i.putExtra("server",server);i.putExtra("username",username);i.putExtra("password",password);i.putExtra("type",kind);i.putExtra("id",id);i.putExtra("ext",ext);i.putExtra("title",titleOf(obj));startActivity(i);
+        String id="series".equals(kind)?obj.optString("episode_id",obj.optString("id","")):obj.optString("stream_id","");
+        if(id.isEmpty()){setStatus("Item sem ID de transmissão.",true);return;}
+        String ext="live".equals(kind)?"m3u8":obj.optString("container_extension",obj.optString("ext","mp4"));
+        if(ext.isEmpty())ext="mp4";
+        LocalLibrary.remember(this,libraryAccount,kind,id,titleOf(obj),ext,artOf(obj));
+        Intent intent=new Intent(this,PlayerActivity.class);
+        intent.putExtra("server",server);intent.putExtra("username",username);
+        intent.putExtra("password",password);intent.putExtra("type",kind);
+        intent.putExtra("id",id);intent.putExtra("ext",ext);intent.putExtra("title",titleOf(obj));
+        intent.putExtra("account",libraryAccount);
+        if(!"live".equals(kind))intent.putExtra("resume_position",LocalLibrary.lastPosition(this,libraryAccount,kind,id));
+        else putChannelQueue(intent,id);
+        startActivity(intent);
     }
     private void showSeries(JSONObject s){
         String sid=s.optString("series_id","");if(sid.isEmpty()){setStatus("Série sem ID.",true);return;}
@@ -344,6 +477,6 @@ public class MainActivity extends Activity {
             }catch(Exception e){runOnUiThread(()->setStatus("Não foi possível obter episódios: "+safeError(e),true));}
         });
     }
-    @Override protected void onResume(){super.onResume();UpdateManager.resumePendingInstall(this);}
+    @Override protected void onResume(){super.onResume();UpdateManager.resumePendingInstall(this);if(loggedIn)filter();}
     @Override protected void onDestroy(){generation++;worker.shutdownNow();super.onDestroy();}
 }
