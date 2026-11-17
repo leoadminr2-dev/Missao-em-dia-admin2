@@ -219,10 +219,10 @@ public class MainActivity extends Activity {
         }
         menu.addView(bar);gap(menu,9);
         LinearLayout shelves=new LinearLayout(this);shelves.setGravity(Gravity.CENTER_VERTICAL);
-        String[] names={"▦ Todos","★ Favoritos","↺ Recentes"},values={"all","favorites","recent"};
-        for(int j=0;j<names.length;j++){
+        String[] shelfNames={"▦ Todos","★ Favoritos","↺ Recentes"},values={"all","favorites","recent"};
+        for(int j=0;j<shelfNames.length;j++){
             final int k=j;
-            shelfButtons[j]=button(names[j],j==0);
+            shelfButtons[j]=button(shelfNames[j],j==0);
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(42),1);
             if(j>0)lp.leftMargin=dp(5);
             shelves.addView(shelfButtons[j],lp);
