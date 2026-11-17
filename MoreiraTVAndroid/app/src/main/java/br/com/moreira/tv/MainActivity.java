@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
         buildUi();
+        UpdateManager.check(this,false);
         String[] access=CredentialsVault.load(this);
         if(access!=null){
             hostInput.setText(access[0]);userInput.setText(access[1]);passInput.setText(access[2]);
@@ -106,10 +107,11 @@ public class MainActivity extends Activity {
         }
     }
     private void showAccessMenu(){
-        new AlertDialog.Builder(this).setTitle("Moreira TV — Acesso")
-            .setItems(new String[]{"Configurar minha conexão","Apagar acesso salvo","Cancelar"},(d,n)->{
-                if(n==0){authCard.setVisibility(View.VISIBLE);setStatus("Atualize seu acesso e toque em ENTRAR.",false);}
-                else if(n==1){
+        new AlertDialog.Builder(this).setTitle("Moreira PLAY — Acesso")
+            .setItems(new String[]{"Verificar atualizações","Configurar minha conexão","Apagar acesso salvo","Cancelar"},(d,n)->{
+                if(n==0){UpdateManager.check(this,true);}
+                else if(n==1){authCard.setVisibility(View.VISIBLE);setStatus("Atualize seu acesso e toque em ENTRAR.",false);}
+                else if(n==2){
                     new AlertDialog.Builder(this).setTitle("Apagar acesso deste celular?")
                         .setMessage("A operação não altera o serviço nem outros dispositivos.")
                         .setNegativeButton("Cancelar",null)
@@ -129,7 +131,7 @@ public class MainActivity extends Activity {
         logo.setBackground(shape(SURFACE,BORDER,14));
         head.addView(logo,new LinearLayout.LayoutParams(dp(50),dp(50)));
         LinearLayout names=vertical();names.setPadding(dp(12),0,0,0);
-        title=label("MOREIRA TV",25,WHITE,true);names.addView(title);
+        title=label("MOREIRA PLAY",25,WHITE,true);names.addView(title);
         names.addView(label("SUA TV. SUA EXPERIÊNCIA.",10,ACCENT,true));
         head.addView(names,new LinearLayout.LayoutParams(0,-2,1));
         Button settings=button("⚙",false);settings.setContentDescription("Gerenciar acesso");
@@ -165,7 +167,7 @@ public class MainActivity extends Activity {
         authCard.addView(label("Chave pessoal",12,MUTED,true));
         passInput=input("Sua chave",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         authCard.addView(passInput);gap(authCard,9);
-        connect=button("ENTRAR NO MOREIRA TV   →",true);authCard.addView(connect);
+        connect=button("ENTRAR NO MOREIRA PLAY   →",true);authCard.addView(connect);
         connect.setOnClickListener(v->login());
         authCard.addView(label("Acesso protegido apenas neste aparelho.",11,MUTED,false));
         status=label("Ative sua TV para começar.",12,BLUE,false);
@@ -265,7 +267,7 @@ public class MainActivity extends Activity {
         String h=hostInput.getText().toString().trim(),u=userInput.getText().toString().trim(),p=passInput.getText().toString();
         if(h.isEmpty()||u.isEmpty()||p.isEmpty()){setStatus("Informe seus dados uma vez para ativar sua TV.",true);return;}
         server=normalize(h);username=u;password=p;loggedIn=false;
-        connect.setEnabled(false);setStatus("Conectando ao Moreira TV…",false);
+        connect.setEnabled(false);setStatus("Conectando ao Moreira PLAY…",false);
         worker.execute(()->{
             try{
                 JSONObject info=fetchObject(null,null);
