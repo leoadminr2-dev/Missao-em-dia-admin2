@@ -1,13 +1,1 @@
-ERRO: compilacao falhou. Detalhes:
-* Exception is:
-org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileDebugJavaWithJavac'.
-	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
-Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Compilation failed; see the compiler output below.
-/home/runner/work/Missao-em-dia-admin2/Missao-em-dia-admin2/MoreiraTVAndroid/app/src/main/java/br/com/moreira/tv/PlayerActivity.java:4: error: cannot find symbol
-import android.app.ActivityNotFoundException;
-  symbol:   class ActivityNotFoundException
-/home/runner/work/Missao-em-dia-admin2/Missao-em-dia-admin2/MoreiraTVAndroid/app/src/main/java/br/com/moreira/tv/PlayerActivity.java:124: error: cannot find symbol
-        } catch(ActivityNotFoundException e) {
-  symbol:   class ActivityNotFoundException
-	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
-BUILD FAILED in 14s
+OK: APK Moreira TV Premium compilado do commit bda39b1629886fbd94e1ef5118df56d2e8eb2796.
