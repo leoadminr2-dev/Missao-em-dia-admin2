@@ -143,6 +143,7 @@ public class PlayerActivity extends Activity {
             Toast.makeText(this,"Fim da lista de canais",Toast.LENGTH_SHORT).show();
             return;
         }
+        mainHandler.removeCallbacksAndMessages(null); // Cancelar tentativas pendentes do canal anterior.
         channelIndex=next;id=channelIds.get(next);
         name=channelNames!=null&&next<channelNames.size()?channelNames.get(next):"Canal";
         fallback=false;retries=0;resumeApplied=false;savedPosition=0;
