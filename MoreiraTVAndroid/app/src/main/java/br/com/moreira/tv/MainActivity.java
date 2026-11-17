@@ -55,6 +55,17 @@ public class MainActivity extends Activity {
     private final List<String> categories=new ArrayList<>(), categoryIds=new ArrayList<>();
     private ArrayAdapter<String> listAdapter;
     private final List<String> shownNames=new ArrayList<>();
+    private static final long CACHE_TTL=5L*60*1000;
+    private final java.util.Map<String,CachedCatalog> catalogCache=new java.util.HashMap<>();
+    private static final class CachedCatalog {
+        final List<String> labels,ids;
+        final List<JSONObject> items;
+        final long created;
+        CachedCatalog(List<String> labels,List<String> ids,List<JSONObject> items){
+            this.labels=new ArrayList<>(labels);this.ids=new ArrayList<>(ids);
+            this.items=new ArrayList<>(items);created=System.currentTimeMillis();
+        }
+    }
     private String type="live", shelf="all", libraryAccount="";
     private final Button[] shelfButtons=new Button[3];
 
@@ -217,8 +228,14 @@ public class MainActivity extends Activity {
             shelves.addView(shelfButtons[j],lp);
             shelfButtons[j].setOnClickListener(v->{shelf=values[k];updateShelves();filter();});
         }
-        menu.addView(shelves);gap(menu,10);
-        menu.addView(label("ESCOLHA O QUE ASSISTIR",12,MUTED,true));
+        menu.addView(shelves);gap(menu,8);
+        LinearLayout section=new LinearLayout(this);section.setGravity(Gravity.CENTER_VERTICAL);
+        section.addView(label("ESCOLHA O QUE ASSISTIR",12,MUTED,true),new LinearLayout.LayoutParams(0,-2,1));
+        Button refresh=button("↻ Atualizar",false);
+        refresh.setContentDescription("Recarregar catalogo de conteudos");
+        refresh.setOnClickListener(v->{catalogCache.remove(type);loadCatalog();});
+        section.addView(refresh,new LinearLayout.LayoutParams(dp(112),dp(43)));
+        menu.addView(section);
         categorySpinner=new Spinner(this);
         categories.add("Todas as categorias");categoryIds.add("all");updateCats();
         categorySpinner.setPadding(dp(12),dp(5),dp(12),dp(5));
@@ -344,7 +361,7 @@ public class MainActivity extends Activity {
     private void login(){
         String h=hostInput.getText().toString().trim(),u=userInput.getText().toString().trim(),p=passInput.getText().toString();
         if(h.isEmpty()||u.isEmpty()||p.isEmpty()){setStatus("Informe seus dados uma vez para ativar sua TV.",true);return;}
-        server=normalize(h);username=u;password=p;libraryAccount=LocalLibrary.account(server,username);loggedIn=false;
+        server=normalize(h);username=u;password=p;libraryAccount=LocalLibrary.account(server,username);loggedIn=false;catalogCache.clear();
         connect.setEnabled(false);setStatus("Conectando ao Moreira PLAY…",false);
         worker.execute(()->{
             try{
@@ -387,7 +404,17 @@ public class MainActivity extends Activity {
     private JSONArray fetchArray(String action,String extra)throws Exception{return new JSONArray(read(new URL(endpoint(action,extra))));}
     private void loadCatalog(){
         if(!loggedIn)return;
-        final String requestedType=type;final int current=++generation;setStatus("Atualizando sua programação…",false);searchInput.setText("");
+        final String requestedType=type;final int current=++generation;
+        searchInput.setText("");
+        CachedCatalog cached=catalogCache.get(requestedType);
+        if(cached!=null&&System.currentTimeMillis()-cached.created<CACHE_TTL){
+            categories.clear();categories.addAll(cached.labels);
+            categoryIds.clear();categoryIds.addAll(cached.ids);
+            allItems.clear();allItems.addAll(cached.items);
+            updateCats();filter();setStatus("●  "+allItems.size()+" opções disponíveis",false);
+            return;
+        }
+        setStatus("Atualizando sua programação…",false);
         allItems.clear();shownItems.clear();shownNames.clear();listAdapter.notifyDataSetChanged();
         final String cAction=requestedType.equals("live")?"get_live_categories":requestedType.equals("movie")?"get_vod_categories":"get_series_categories";
         final String iAction=requestedType.equals("live")?"get_live_streams":requestedType.equals("movie")?"get_vod_streams":"get_series";
@@ -397,7 +424,7 @@ public class MainActivity extends Activity {
                 List<String> cats=new ArrayList<>(),ids=new ArrayList<>();cats.add("Todas as categorias");ids.add("all");
                 for(int i=0;i<cc.length();i++){JSONObject item=cc.optJSONObject(i);if(item==null)continue;cats.add(item.optString("category_name","Sem nome"));ids.add(item.optString("category_id",""));}
                 List<JSONObject> parsed=new ArrayList<>();for(int i=0;i<ii.length();i++){JSONObject item=ii.optJSONObject(i);if(item!=null)parsed.add(item);}
-                runOnUiThread(()->{if(current!=generation)return;categories.clear();categories.addAll(cats);categoryIds.clear();categoryIds.addAll(ids);allItems.addAll(parsed);updateCats();filter();setStatus("●  "+parsed.size()+" opções disponíveis",false);});
+                runOnUiThread(()->{if(current!=generation)return;catalogCache.put(requestedType,new CachedCatalog(cats,ids,parsed));categories.clear();categories.addAll(cats);categoryIds.clear();categoryIds.addAll(ids);allItems.addAll(parsed);updateCats();filter();setStatus("●  "+parsed.size()+" opções disponíveis",false);});
             }catch(Exception e){runOnUiThread(()->{if(current==generation)setStatus("Falha ao carregar catálogo: "+safeError(e),true);});}
         });
     }
