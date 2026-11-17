@@ -1,22 +1,20 @@
-# Moreira TV Premium — Android v1.1 (beta)
+# MOREIRA PLAY — Android (base única para atualizações)
 
-Player de TV personalizado para uso privado no Android, com catálogo TV ao vivo, filmes, séries e episódios. A transmissão depende da conta do serviço contratada/licenciada pelo usuário.
+Este diretório no branch `moreira-play-canonical` contém o app Android oficial para atualizações futuras. **Não trocar applicationId** `br.com.moreiraplay.app` em lançamentos posteriores.
 
-## Como usar
-1. Instale `Moreira-TV-Premium.apk` no Android.
-2. Na primeira abertura, preencha o endereço de conexão, código e chave pessoal da conta.
-3. Toque **ENTRAR NO MOREIRA TV**. Se a autenticação for válida, a programação abrirá.
-4. Nas próximas aberturas, o aplicativo reconectará automaticamente. Não será necessário preencher login novamente.
-5. Use o ícone **⚙** para configurar outra conta ou apagar o acesso salvo deste aparelho.
+## Fluxo de atualização
+- Identidade visual: MOREIRA PLAY.
+- Novo usuário instala uma vez o APK assinado e distribuído em `https://moreira-play-updates.pages.dev/`.
+- O menu de configurações do app inclui **Verificar atualizações**.
+- Na abertura, o app também consulta `https://moreira-play-updates.pages.dev/manifest.json`.
+- Se existir versão nova, o app solicita confirmação para baixar e instala o APK por cima, utilizando `FileProvider` e o instalador oficial do Android.
+- Antes de instalar, exige `app_slug` correspondente, versionCode maior, HTTPS do host autorizado, SHA-256 correto, `applicationId` igual e assinatura digital compatível.
+- O usuário confirma no Android as permissões obrigatórias; não há instalação silenciosa.
+- A chave de assinatura de teste permanente fica apenas no repositório **privado** `leoadminr2-dev/missao-em-dia-admin`, junto com o workflow `moreira-play-stable-release.yml`. Nunca mover a chave para o repositório público.
+- O workflow privado compila, valida assinatura, publica o APK/manifesto em novo projeto Cloudflare Pages sem substituir a Central.
 
-## Segurança e compatibilidade
-- Não existem senhas compartilhadas ou credenciais de serviços no código nem no APK.
-- Os dados digitados ficam criptografados com AES-GCM, chave protegida por Android Keystore; backup Android está desativado.
-- A autenticação do servidor continua ocorrendo internamente a cada conexão. O login visual é ocultado após a primeira ativação; não se trata de burlar autenticação do fornecedor.
-- O servidor inicialmente configurado usa HTTP sem TLS: ao trafegar na rede, credenciais e streams continuam sujeitos à insegurança de HTTP. Use HTTPS se o provedor disponibilizar.
-- Instalação paralela: o applicationId é `br.com.moreira.tv.premium`, para não substituir nem exigir desinstalação da versão 1.0 funcional.
-- Mesmo que a versão anterior esteja conectada, por não haver armazenamento de credenciais na v1.0, é necessário preenchê-las **uma vez** na v1.1.
-- O player usa Media3/ExoPlayer, HLS `.m3u8` e alternativa MPEG-TS `.ts` quando apropriado.
+## Migração a partir das versões 1.0, 1.1, 1.2, 1.3
+Os APKs anteriores foram distribuídos com `applicationId` diferentes e chaves de debug temporárias. **O Android não permite transformar esses três apps em um por atualização.** A mudança para `br.com.moreiraplay.app` exige uma última instalação independente. Só depois de verificar o novo app, o usuário pode remover os ícones antigos.
 
-## Compilação
-JDK 17, Android SDK 35, Gradle 8.11.1; `gradle :app:assembleDebug`. O GitHub Actions publica a build em `public-download/Moreira-TV-Premium.apk` quando bem-sucedida. É uma versão de teste assinada com certificado debug da automação, não um release estável. Verifique o resultado real antes de instalar.
+## Próximos lançamentos
+Aumentar `versionCode` e `versionName`; manter `applicationId` e a chave de assinatura, construir no workflow privado, conferir que a publicação HTTPS recebeu o APK correto e o manifesto de versão. Nunca sobrescrever os binários das versões antigas antes de validar a nova. A Central e os outros aplicativos não são alterados.
