@@ -111,7 +111,7 @@ public class PlayerActivity extends Activity {
 
     private void showOptions() {
         new AlertDialog.Builder(this)
-            .setTitle(name==null?"Moreira TV":name)
+            .setTitle(name==null?"Moreira PLAY":name)
             .setItems(new String[]{"Voltar a programacao","Abrir em outro player",fillScreen ? "Mostrar imagem completa (sem cortar)" : "Preencher a tela inteira","Continuar assistindo"},(d,choice)->{
                 if(choice==0)finish();
                 else if(choice==1)openExternal();
