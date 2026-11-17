@@ -8,8 +8,8 @@ android {
         applicationId 'br.com.moreiraplay.app'
         minSdk 23
         targetSdk 33
-        versionCode 200
-        versionName '2.0.0'
+        versionCode 300
+        versionName '3.0.0'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
